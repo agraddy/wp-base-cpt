@@ -39,6 +39,7 @@ class Type {
 		if(
 			$type == 'editor'
 			|| $type == 'title'
+			|| $type == 'author'
 		) {
 			array_push($this->supports, $type);
 		} else {
@@ -56,13 +57,6 @@ class Type {
 			$this->custom_title = $title;
 		}
 
-	}
-
-	function assoc($type, $extra) {
-		$temp = new \stdClass();
-		$temp->type = $type;
-		$temp->extra = $extra;
-		array_push($this->associates, $temp);
 	}
 
 	function init() {
@@ -144,6 +138,11 @@ class Type {
 			} elseif($item->type == 'group') {
 				$html .= '<div>';
 				$html .= '<label>' . esc_html($item->title) . '</label>';
+			} elseif($item->type == 'hidden') {
+				if(!$value) {
+					$value = 0;
+				}
+				$html .= '<input type="hidden" name="' . esc_attr($item->title) . '" value="' . esc_attr($value) . '">';
 			} elseif($item->type == 'radio') {
 				$html .= '<div>';
 				$html .= '<label><input type="radio" name="' . esc_attr($item->key) . '" value="' . esc_attr($item->extra) . '"';
@@ -157,6 +156,19 @@ class Type {
 				$html .= '<label>' . esc_html($item->title) . '</label>';
 				$html .= '<input class="widefat" type="text" name="' . esc_attr($item->key) . '" value="' . esc_attr($value) . '" placeholder="' . esc_attr($item->extra) . '">';
 				$html .= '</p>';
+			} elseif($item->type == 'select_user') {
+				$html .= '<div>';
+				$html .= '<label>' . esc_html($item->title) . '</label><br>';
+				$html .= wp_dropdown_pages(array(
+						'show_option_none' => __( 'Please Select...' ),
+						'post_type'=> substr($item->type, 7),
+						'name' => $item->key,             
+						'echo' => 0,                    
+						'selected' => $value
+					));  
+				$html .= '<br>';
+				$html .= '<br>';
+				$html .= '</div>';
 			} elseif(strpos($item->type, 'select_') === 0) {
 				$html .= '<div>';
 				$html .= '<label>' . esc_html($item->title) . '</label><br>';
@@ -216,7 +228,8 @@ class Type {
 				if(
 					isset($_POST[$item->key]) 
 					&& (
-						$item->type == 'text'
+						$item->type == 'hidden'
+						|| $item->type == 'text'
 						|| strpos($item->type, 'select_') === 0
 					)
 				) {
