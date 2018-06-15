@@ -1,11 +1,12 @@
 {
     "name": "agraddy/wp-base-cpt",
+    "description": "Allows easy creation of Wordpress Custom Post Types.",
+    "license": "MIT",
     "type": "library",
     "require": {},
     "autoload": {
 	    "psr-4": {
 		    "agraddy\\base\\": "src/"
 	    }
-    },
-    "version": "0.1.0"
+    }
 }

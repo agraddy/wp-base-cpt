@@ -3,25 +3,47 @@ namespace agraddy\base;
 
 class Column {
 	public $columns = [];
+	public $keys = [];
+	public $filter_type = '';
+	public $filters = [];
+	public $filter_keys = [];
 	public $full_key;
+	public $sorts;
+	public $type;
 
-	function __construct($full_key) {
-		$this->full_key = $full_key;
+	function __construct($type, $full_key) {
+		$this->type = $type;
+		$this->full_key = $type->full_key;
 		add_action('init', array($this, 'wpInit'));
 	}
 
-	function add($key, $title = '') {
+	function add($key, $title = '', $format = null) {
 		$temp = new \stdClass();
 
 		if($key == 'cb' && $title == '') {
 			$temp->key = $key;
 			$temp->title = '<input type="checkbox" />';
+		} elseif(is_array($key)) {
+			$temp->key = implode('~~', $key);
+			$temp->title = $title;
+			$temp->format = $format;
 		} else {
 			$temp->key = $key;
 			$temp->title = $title;
+			$temp->format = $format;
 		}
 
 		array_push($this->columns, $temp);
+		$this->keys[$temp->key] = $temp;
+	}
+
+	function filter($type, $list) {   
+		$this->filter_type = $type;
+		$this->filters = $list;
+
+		for($i = 0; $i < count($list); $i++) {
+			$this->filter_keys['filter_' . $this->parseToKey($list[$i])] = $list[$i];
+		}
 	}
 
 	function parseToKey($input) {   
@@ -31,14 +53,25 @@ class Column {
 		return $output;
 	}
 
+	function sort($input, $fn = null) {   
+		$this->sorts[] = [$input, $fn];
+	}
+
         // Remove date filter
         function wpAdminInit() {
                 global $typenow;
                 if(
                         $typenow == $this->full_key
+			&& !$this->type->config['show_filter_date']
                 ) {
                         add_filter('months_dropdown_results', '__return_empty_array');
+		} else {
+                        add_filter('months_dropdown_results', [$this, 'wpMonthsDropdownResults']);
                 }
+
+                if($typenow == $this->full_key && count($this->sorts)) {
+			add_filter( 'manage_edit-' . $this->full_key . '_sortable_columns', array($this, 'wpSortableColumns'));
+		}
         }
 
 	function wpColumns() {
@@ -53,12 +86,63 @@ class Column {
 	}
 
 	function wpColumnContent($column, $post_id) {
-		if(
-			$column != 'cb'
-			&& $column != 'title'
-		) {
-			echo get_post_meta( $post_id, $column, true );
+		$output;
+		if(strpos($column, 'author__') === 0) {
+			$parts = explode('__', $column);
+			$post = get_post($post_id);
+			$author = get_user_by('ID', $post->post_author);
+
+			$temp = $parts[1];
+			if(isset($author->$temp)) {
+				$output = $author->$temp;
+			} else {
+				$output = get_user_meta($author->ID, $temp, true);
+			}
+		} elseif(strpos($column, '__') !== false) {
+			$parts = explode('__', $column);
+			$user_id = get_post_meta( $post_id, $parts[0], true );
+			$user = get_user_by('ID', $user_id);
+
+			$temp = $parts[1];
+			if(isset($user->$temp)) {
+				$output = $user->$temp;
+			} else {
+				if(isset($user->ID)) {
+					$output = get_user_meta($user->ID, $temp, true);
+				} else {
+					$output = '';
+				}
+			}
+		} elseif(strpos($column, '~~') !== false && is_callable($this->keys[$column]->format)) {
+			$parts = explode('~~', $column);
+			$values = [];
+
+			for($i = 0; $i < count($parts); $i++) {
+				$values[] = get_post_meta( $post_id, $parts[$i], true );
+			}
+
+			$fn = $this->keys[$column]->format;
+			$output = $fn(...$values);
+		} elseif(strpos($column, '--') !== false && is_callable($this->keys[$column]->format)) {
+			$parts = explode('--', $column);
+			$values = [];
+
+			for($i = 0; $i < 1; $i++) {
+				$values[] = get_post_meta( $post_id, $parts[$i], true );
+			}
+
+			$fn = $this->keys[$column]->format;
+			$output = $fn(...$values);
+		} else {
+			$output = get_post_meta( $post_id, $column, true );
 		}
+
+		if(strpos($column, '~~') === false && strpos($column, '--') === false && is_callable($this->keys[$column]->format)) {
+			$fn = $this->keys[$column]->format;
+			$output = $fn($output);
+		}
+
+		echo $output;
 	}
 
 	function wpInit() {
@@ -77,7 +161,35 @@ class Column {
 		//add_filter('redirect_post_location', array($this, 'wpRedirectSave'));
 
 		// Remove filter views like All(1) and Published(1)
-		add_filter( 'views_edit-' . $this->full_key, '__return_null' );
+		if(!$this->type->config['show_filters']) {
+			add_filter( 'views_edit-' . $this->full_key, '__return_null' );
+		} elseif(count($this->filters)) {
+			add_filter( 'views_edit-' . $this->full_key, array($this, 'wpViewsEdit'));
+			add_filter('parse_query', [$this, 'wpParseQuery']);
+		}
+	}
+
+        function wpMonthsDropdownResults($months) {
+		//echo '<pre>';
+		//print_r($months);
+		//echo '</pre>';
+		//die;
+		return $months;
+	}
+
+        function wpParseQuery($query) {
+		 if(is_admin() && $query->query['post_type'] == $this->full_key && isset($_GET[$this->filter_type])) {
+
+			 $key = $_GET[$this->filter_type];
+			 if(isset($this->filter_keys[$key]) && in_array($this->filter_keys[$key], $this->filters)) {
+				 $query->query_vars['meta_key'] = $this->filter_type;
+				 $query->query_vars['meta_value'] = $this->filter_keys[$key];
+				 //echo '<pre>';
+				 //print_r($query);die;
+			 }
+		 }
+
+		return $query;
 	}
 
         // Remove hover edit
@@ -97,6 +209,71 @@ class Column {
                 }
                 return $actions;
         }
+
+	function wpSortableColumns() {
+		$output = [];
+		for($i = 0; $i < count($this->sorts); $i++) {
+			$output[$this->sorts[$i][0]] = $this->sorts[$i][0];
+		}
+
+		return $output;
+	}
+
+        function wpViewsEdit($views) {
+		//echo '<pre>';print_r($views);die;
+		$views = array();
+
+		// Get all count first
+		$key = 'filter_all'; 
+		remove_filter('parse_query', [$this, 'wpParseQuery']);
+		$posts = get_posts([
+			'post_type' => $this->full_key,
+			'numberposts' => -1
+		]);
+		$count = count($posts);
+		add_filter('parse_query', [$this, 'wpParseQuery']);
+
+		$url = admin_url('edit.php?&post_type=' . $this->full_key);
+		$views[$key] = '';
+		$views[$key] .= '<a href="' . $url . '"';
+		if(!isset($_GET[$this->filter_type])) {
+			$views[$key] .= ' class="current"'; 
+		}
+		$views[$key] .= '>'; 
+		$views[$key] .= __('All', $this->full_key); 
+		$views[$key] .= ' <span class="count">(' . $count . ')</span>'; 
+		$views[$key] .= '</a>'; 
+
+		for($i = 0; $i < count($this->filters); $i++) {
+			$name = $this->filters[$i];
+			$key = 'filter_' . $this->parseToKey($name);
+			$url = admin_url('edit.php?post_status=publish&post_type=' . $this->full_key . '&' . $this->filter_type . '='. $key);
+
+			remove_filter('parse_query', [$this, 'wpParseQuery']);
+			$posts = get_posts([
+				'post_type' => $this->full_key,
+				'numberposts' => -1,
+				'meta_key' => $this->filter_type,
+				'meta_value' => $name
+			]);
+			$count = count($posts);
+			add_filter('parse_query', [$this, 'wpParseQuery']);
+
+			if($count) {
+				$views[$key] = '';
+				$views[$key] .= '<a href="' . $url . '"';
+				if(isset($_GET[$this->filter_type]) && $_GET[$this->filter_type] == $key) {
+					$views[$key] .= ' class="current"'; 
+				}
+				$views[$key] .= '>'; 
+				$views[$key] .= __($name, $this->full_key); 
+				$views[$key] .= ' <span class="count">(' . $count . ')</span>'; 
+				$views[$key] .= '</a>'; 
+			}
+		}
+
+		return $views;
+	}
 
         // Inspired by: https://gist.github.com/davejamesmiller/1966595
 	/*

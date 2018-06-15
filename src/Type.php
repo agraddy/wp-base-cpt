@@ -5,6 +5,7 @@ use agraddy\base\Column;
 class Type {
 	public $args;
 	public $cap;
+	public $config = [];
 	public $custom_title;
 	public $key;
 	public $plural;
@@ -23,6 +24,9 @@ class Type {
 	public $titles = [];
 	public $values = [];
 
+	public $title_key;
+	public $title_fn;
+
 	function __construct($key, $singular, $plural, $cap, $args) {
 		$this->key = $key;
 		$this->singular = $singular;
@@ -32,7 +36,14 @@ class Type {
 
 		$this->full_key = $key . '_' . $this->parseToKey($singular);
 
-		$this->column = new Column($this->full_key);
+		$this->column = new Column($this, $this->full_key);
+
+		$this->config('show_bulk_actions', true);
+		$this->config('show_filter_date', false);
+		$this->config('show_filters', false);
+		$this->config('show_search', false);
+		$this->config('show_simple_save', true);
+		$this->config('auto_save', false);
 	}
 
 	function add($type, $title = '', $key = '', $extra = null) {
@@ -59,6 +70,10 @@ class Type {
 
 	}
 
+	function config($key, $value) {
+		$this->config[$key] = $value;
+	}
+
 	function init() {
 		// Create Custom Post Type
 
@@ -70,6 +85,42 @@ class Type {
 		$output = strtolower($output);  
 		$output = str_replace(' ', '_', $output); 
 		return $output;
+	}
+
+	function title($input, $fn) {   
+		$this->title_key = $this->parseToKey($input);
+		$this->title_fn = $fn;
+	}
+
+	function wpAdminEnqueueScripts($hook_suffix) {
+		global $post_type;
+
+		if($post_type == $this->full_key) {
+			if(!$this->config['auto_save']) {
+				wp_deregister_script('autosave');
+			}
+
+			$css = "";
+			$css .= "body { background: red; }\n";
+			wp_add_inline_style($this->full_key . '_inline', $css);
+		}
+	}
+
+	function wpAdminPrintScripts() {
+		global $post_type;
+
+		if($post_type == $this->full_key) {
+			$css = "";
+			$css .= "<style>\n";
+			if(!$this->config['show_bulk_actions']) {
+				$css .= "#posts-filter .bulkactions { display: none; } \n";
+			}
+			if(!$this->config['show_search']) {
+				$css .= "#posts-filter .search-box { display: none; } \n";
+			}
+			$css .= "</style>\n";
+			echo $css;
+		}
 	}
 
 	function wpInit() {
@@ -113,16 +164,44 @@ class Type {
 			'show_in_menu' => true,
 			'capabilities' => $capabilities,
 			'hierarchical' => true,
-			'register_meta_box_cb' => array($this, 'wpMetaBox')
+			'register_meta_box_cb' => array($this, 'wpMetaBoxes')
 		);
+
 		$args = array_merge($args, $this->args);
 		register_post_type($this->full_key, $args );
 
 		add_filter('enter_title_here', array($this, 'wpTitleHere'), 10, 2);
 		add_action('save_post_' . $this->full_key, array($this, 'wpSave'));
+
+		add_action('admin_enqueue_scripts', array($this, 'wpAdminEnqueueScripts'));
+		add_action('admin_print_scripts', array($this, 'wpAdminPrintScripts'));
 	}
 
-	function wpDetails() {
+	function wpMetaBoxes() {
+		if(count($this->details)) {
+			add_meta_box(
+				$this->full_key . '_details',
+				'Details',
+				array($this, 'wpMetaDetails'),
+				$this->full_key,
+				'normal',
+				'default'
+			);
+		}
+		if($this->config['show_simple_save']) {
+			remove_meta_box( 'submitdiv', $this->full_key, 'side' );
+			add_meta_box(
+				$this->full_key . '_save',
+				'Save',
+				array($this, 'wpMetaSave'),       
+				$this->full_key,      
+				'side',
+				'high'
+			);
+		}
+	}
+
+	function wpMetaDetails() {
 		global $post;
 
 		$html = '';
@@ -133,6 +212,8 @@ class Type {
 				$item->extra = '';
 			}
 			$value = get_post_meta( $post->ID, $item->key, true );
+			//echo $item->key;
+			//echo '-<br>';
 			if($item->type == 'end_group') {
 				$html .= '</p>';
 			} elseif($item->type == 'group') {
@@ -156,16 +237,46 @@ class Type {
 				$html .= '<label>' . esc_html($item->title) . '</label>';
 				$html .= '<input class="widefat" type="text" name="' . esc_attr($item->key) . '" value="' . esc_attr($value) . '" placeholder="' . esc_attr($item->extra) . '">';
 				$html .= '</p>';
+			} elseif($item->type == 'select') {
+				$html .= '<div>';
+				$html .= '<label>' . esc_html($item->title) . '</label><br>';
+				$html .= '<select name="' . esc_attr($item->key) . '">';
+				for($i = 0; $i < count($item->extra); $i++) {
+					if(is_array($item->extra[$i])) {
+						if($item->extra[$i][1] == $value) {
+							$html .= '<option value="' . esc_attr($item->extra[$i][1]) . '" selected>' . esc_html($item->extra[$i][0]) . '</option>';
+						} else {
+							$html .= '<option value="' . esc_attr($item->extra[$i][1]) . '">' . esc_html($item->extra[$i][0]) . '</option>';
+						}
+					} else {
+						if($item->extra[$i] == $value) {
+							$html .= '<option value="' . esc_attr($item->extra[$i]) . '" selected>' . esc_html($item->extra[$i]) . '</option>';
+						} else {
+							$html .= '<option value="' . esc_attr($item->extra[$i]) . '">' . esc_html($item->extra[$i]) . '</option>';
+						}
+					}
+				}
+				$html .= '</select>';
+				$html .= '<br>';
+				$html .= '<br>';
+				$html .= '</div>';
 			} elseif($item->type == 'select_user') {
 				$html .= '<div>';
 				$html .= '<label>' . esc_html($item->title) . '</label><br>';
-				$html .= wp_dropdown_pages(array(
+				$html .= wp_dropdown_users(array(
 						'show_option_none' => __( 'Please Select...' ),
-						'post_type'=> substr($item->type, 7),
 						'name' => $item->key,             
 						'echo' => 0,                    
 						'selected' => $value
 					));  
+				$html .= '<br>';
+				$html .= '<br>';
+				$html .= '</div>';
+			} elseif(strpos($item->type, 'select_custom') === 0) {
+				$fn = $item->extra;
+				$html .= '<div>';
+				$html .= '<label>' . esc_html($item->title) . '</label><br>';
+				$html .= $fn($item->title, $item->key, $value);
 				$html .= '<br>';
 				$html .= '<br>';
 				$html .= '</div>';
@@ -186,38 +297,45 @@ class Type {
 		}
 
 		echo $html;
-
-
-		/*
-		$data = array();
-
-		$data['domain'] = get_post_meta( $post->ID, 'domain', true );
-		$data['email'] = get_post_meta( $post->ID, 'email', true );
-		$data['phone'] = get_post_meta( $post->ID, 'phone', true );
-
-		$selected = get_post_meta( $post->ID, 'page_id', true );
-		$data['pages'] = wp_dropdown_pages(array(
-			'show_option_none' => __( 'Please Select...' ),
-			'post_type'=> 'page',
-			'name' => 'page_id',
-			'echo' => 0,
-			'selected' => $selected
-		));
-
-		echo $this->show('meta_box_domain_details', $data);
-		 */
 	}
 
-	function wpMetaBox() {
-		add_meta_box(
-			$this->full_key . '_details',
-			'Details',
-			array($this, 'wpDetails'),
-			$this->full_key,
-			'normal',
-			'default'
-		);
-	}
+	function wpMetaSave() {
+                global $post;
+
+                $data = array();
+                // From: https://gist.github.com/NiloySarker/2d1954eef3b0003d718d#file-replace-wp_submit-php-L93
+                if (!in_array( $post->post_status, array('publish', 'future', 'private') ) || 0 == $post->ID ) {
+                        $initial_save = true;
+                } else {
+                        $initial_save = false;
+                }    
+
+		$redirect_info = [];
+
+		// Modified from: https://gist.github.com/NiloySarker/2d1954eef3b0003d718d
+?>
+<div class="submitbox" id="submitpost">
+         <div id="major-publishing-actions" style="background: transparent; border: 0;">
+                <?php do_action( 'post_submitbox_start' ); ?>
+                 <div id="publishing-action">    
+                         <span class="spinner"></span>   
+                        <input name="post_status" type="hidden" id="post_status" value="publish" />
+                        <input name="original_publish" type="hidden" id="original_publish" value="Update" />
+                        <input name="save" type="submit" class="button button-primary button-large" id="publish" accesskey="p" value="Save" />
+                        <?php if($initial_save): ?>
+                        <input type="hidden" name="initial_save" value="yes" />
+                        <?php endif; ?>                 
+      
+                        <?php foreach($redirect_info as  $key => $val): ?>
+                        <input type="hidden" name="redirect_<?php echo $key; ?>" value="<?php echo $val; ?>" />
+                        <?php endforeach; ?>            
+                 </div>
+                 <div class="clear"></div>       
+         </div>
+ </div>
+<?php
+
+        }
 
 	function wpSave($post_id) {
 		global $wpdb;
@@ -230,6 +348,7 @@ class Type {
 					&& (
 						$item->type == 'hidden'
 						|| $item->type == 'text'
+						|| $item->type == 'select'
 						|| strpos($item->type, 'select_') === 0
 					)
 				) {
@@ -248,6 +367,13 @@ class Type {
 					$where = array( 'ID' => $post_id );
 					$wpdb->update( $wpdb->posts, array( 'post_title' => $title ), $where );
 				}
+			}
+
+			if(isset($this->title_key) && isset($this->title_fn) && isset($_POST[$this->title_key])) {
+				$fn = $this->title_fn;
+				$title = $fn($_POST[$this->title_key]);
+				$where = array( 'ID' => $post_id );
+				$wpdb->update( $wpdb->posts, array( 'post_title' => $title ), $where );
 			}
 		}
 	}
