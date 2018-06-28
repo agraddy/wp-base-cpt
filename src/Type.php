@@ -38,11 +38,13 @@ class Type {
 
 		$this->column = new Column($this, $this->full_key);
 
+		$this->config('show_add_new', true);
 		$this->config('show_bulk_actions', true);
 		$this->config('show_filter_date', false);
 		$this->config('show_filters', false);
 		$this->config('show_search', false);
 		$this->config('show_simple_save', true);
+		$this->config('show_back_save', false);
 		$this->config('auto_save', false);
 	}
 
@@ -53,6 +55,16 @@ class Type {
 			|| $type == 'author'
 		) {
 			array_push($this->supports, $type);
+		} elseif($type == 'html') {
+			if(!$key) {
+				$key = 'html';
+			}
+			$temp = new \stdClass();
+			$temp->type = $type;
+			$temp->title = $title;
+			$temp->key = $key;
+			$temp->extra = $extra;
+			array_push($this->details, $temp);
 		} else {
 			if(!$key) {
 				$key = $this->parseToKey($title);
@@ -155,6 +167,10 @@ class Type {
 			$this->supports = false;
 		}
 
+		if(!$this->config['show_add_new']) {
+			$capabilities['create_posts'] = false;
+		}
+
 		$args = array(
 			'labels'        => $labels,
 			'description'   => 'A list of ' . $this->plural . '.',
@@ -176,6 +192,26 @@ class Type {
 		add_action('admin_enqueue_scripts', array($this, 'wpAdminEnqueueScripts'));
 		add_action('admin_print_scripts', array($this, 'wpAdminPrintScripts'));
 	}
+
+	function wpMetaBack() {
+                global $post;
+
+                $data = array();
+
+		// Modified from: https://gist.github.com/NiloySarker/2d1954eef3b0003d718d
+?>
+<div class="submitbox" id="submitpost">
+         <div id="major-publishing-actions" style="background: transparent; border: 0;">
+                 <div id="publishing-action">    
+			 <a href="edit.php?post_type=<?php echo $post->post_type; ?>" class="button button-primary button-large">Back</a>
+                 </div>
+                 <div class="clear"></div>       
+         </div>
+ </div>
+<?php
+
+        }
+
 
 	function wpMetaBoxes() {
 		if(count($this->details)) {
@@ -199,6 +235,17 @@ class Type {
 				'high'
 			);
 		}
+		if($this->config['show_back_save']) {
+			remove_meta_box( 'submitdiv', $this->full_key, 'side' );
+			add_meta_box(
+				$this->full_key . '_save',
+				'Back',
+				array($this, 'wpMetaBack'),       
+				$this->full_key,      
+				'side',
+				'high'
+			);
+		}
 	}
 
 	function wpMetaDetails() {
@@ -215,7 +262,7 @@ class Type {
 			//echo $item->key;
 			//echo '-<br>';
 			if($item->type == 'end_group') {
-				$html .= '</p>';
+				$html .= '</div>';
 			} elseif($item->type == 'group') {
 				$html .= '<div>';
 				$html .= '<label>' . esc_html($item->title) . '</label>';
@@ -224,6 +271,13 @@ class Type {
 					$value = 0;
 				}
 				$html .= '<input type="hidden" name="' . esc_attr($item->title) . '" value="' . esc_attr($value) . '">';
+			} elseif($item->type == 'html') {
+				$fn = $item->title;
+				if(is_object($fn) && ($fn instanceof \Closure)) {
+					$html .= $fn($post->ID);
+				} else {
+					$html .= $item->title;
+				}
 			} elseif($item->type == 'radio') {
 				$html .= '<div>';
 				$html .= '<label><input type="radio" name="' . esc_attr($item->key) . '" value="' . esc_attr($item->extra) . '"';
@@ -236,6 +290,11 @@ class Type {
 				$html .= '<p>';
 				$html .= '<label>' . esc_html($item->title) . '</label>';
 				$html .= '<input class="widefat" type="text" name="' . esc_attr($item->key) . '" value="' . esc_attr($value) . '" placeholder="' . esc_attr($item->extra) . '">';
+				$html .= '</p>';
+			} elseif($item->type == 'textarea') {
+				$html .= '<p>';
+				$html .= '<label>' . esc_html($item->title) . '</label>';
+				$html .= '<textarea class="widefat" name="' . esc_attr($item->key) . '" placeholder="' . esc_attr($item->extra) . '">' . esc_html($value) . '</textarea>';
 				$html .= '</p>';
 			} elseif($item->type == 'select') {
 				$html .= '<div>';
@@ -295,6 +354,8 @@ class Type {
 				$html .= '</div>';
 			}
 		}
+
+		$html = \apply_filters('agraddy_cpt_details', $html);
 
 		echo $html;
 	}
