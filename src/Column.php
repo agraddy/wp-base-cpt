@@ -8,7 +8,7 @@ class Column {
 	public $filters = [];
 	public $filter_keys = [];
 	public $full_key;
-	public $sorts;
+	public $sorts = [];
 	public $type;
 
 	function __construct($type, $full_key) {
