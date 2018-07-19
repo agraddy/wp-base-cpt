@@ -87,7 +87,15 @@ class Column {
 
 	function wpColumnContent($column, $post_id) {
 		$output;
-		if(strpos($column, 'author__') === 0) {
+		if($column == '__fn' || $column == '__html' || $column == '__htm') {
+			if(is_callable($this->keys[$column]->format)) {
+				$fn = $this->keys[$column]->format;
+				$output = $fn($post_id);
+			} else {
+				$output = $this->keys[$column]->format;
+			}   
+		} elseif(strpos($column, 'author__') === 0) {
+			// Get author info
 			$parts = explode('__', $column);
 			$post = get_post($post_id);
 			$author = get_user_by('ID', $post->post_author);
@@ -99,6 +107,7 @@ class Column {
 				$output = get_user_meta($author->ID, $temp, true);
 			}
 		} elseif(strpos($column, '__') !== false) {
+			// Get user info
 			$parts = explode('__', $column);
 			$user_id = get_post_meta( $post_id, $parts[0], true );
 			$user = get_user_by('ID', $user_id);
@@ -137,7 +146,7 @@ class Column {
 			$output = get_post_meta( $post_id, $column, true );
 		}
 
-		if(strpos($column, '~~') === false && strpos($column, '--') === false && is_callable($this->keys[$column]->format)) {
+		if($column == '__fn' && $column == '__html' && $column == '__htm' && strpos($column, '~~') === false && strpos($column, '--') === false && is_callable($this->keys[$column]->format)) {
 			$fn = $this->keys[$column]->format;
 			$output = $fn($output);
 		}
