@@ -300,18 +300,18 @@ class Type {
 				$html .= '<div>';
 				$html .= '<label>' . esc_html($item->title) . '</label><br>';
 				$html .= '<select name="' . esc_attr($item->key) . '">';
-				for($i = 0; $i < count($item->extra); $i++) {
-					if(is_array($item->extra[$i])) {
-						if($item->extra[$i][1] == $value) {
-							$html .= '<option value="' . esc_attr($item->extra[$i][1]) . '" selected>' . esc_html($item->extra[$i][0]) . '</option>';
+				for($j = 0; $j < count($item->extra); $j++) {
+					if(is_array($item->extra[$j])) {
+						if($item->extra[$j][1] == $value) {
+							$html .= '<option value="' . esc_attr($item->extra[$j][1]) . '" selected>' . esc_html($item->extra[$j][0]) . '</option>';
 						} else {
-							$html .= '<option value="' . esc_attr($item->extra[$i][1]) . '">' . esc_html($item->extra[$i][0]) . '</option>';
+							$html .= '<option value="' . esc_attr($item->extra[$j][1]) . '">' . esc_html($item->extra[$j][0]) . '</option>';
 						}
 					} else {
-						if($item->extra[$i] == $value) {
-							$html .= '<option value="' . esc_attr($item->extra[$i]) . '" selected>' . esc_html($item->extra[$i]) . '</option>';
+						if($item->extra[$j] == $value) {
+							$html .= '<option value="' . esc_attr($item->extra[$j]) . '" selected>' . esc_html($item->extra[$j]) . '</option>';
 						} else {
-							$html .= '<option value="' . esc_attr($item->extra[$i]) . '">' . esc_html($item->extra[$i]) . '</option>';
+							$html .= '<option value="' . esc_attr($item->extra[$j]) . '">' . esc_html($item->extra[$j]) . '</option>';
 						}
 					}
 				}
