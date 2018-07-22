@@ -87,7 +87,7 @@ class Column {
 
 	function wpColumnContent($column, $post_id) {
 		$output;
-		if($column == '__fn' || $column == '__html' || $column == '__htm') {
+		if(substr($column, 0, 4) == '__fn' || substr($column, 0, 6) == '__html' || substr($column, 0, 5) == '__htm') {
 			if(is_callable($this->keys[$column]->format)) {
 				$fn = $this->keys[$column]->format;
 				$output = $fn($post_id);
@@ -124,7 +124,7 @@ class Column {
 			}
 		} elseif(strpos($column, '==') !== false) {
 			// Get post info
-			$parts = explode('__', $column);
+			$parts = explode('==', $column);
 			$post_id = get_post_meta( $post_id, $parts[0], true );
 			$post = get_post($post_id);
 
@@ -162,7 +162,7 @@ class Column {
 			$output = get_post_meta( $post_id, $column, true );
 		}
 
-		if($column == '__fn' && $column == '__html' && $column == '__htm' && strpos($column, '~~') === false && strpos($column, '--') === false && is_callable($this->keys[$column]->format)) {
+		if(substr($column, 0, 4) == '__fn' && substr($column, 0, 6) == '__html' && substr($column, 0, 5) == '__htm' && strpos($column, '~~') === false && strpos($column, '--') === false && is_callable($this->keys[$column]->format)) { 
 			$fn = $this->keys[$column]->format;
 			$output = $fn($output);
 		}
