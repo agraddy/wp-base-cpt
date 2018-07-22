@@ -122,6 +122,22 @@ class Column {
 					$output = '';
 				}
 			}
+		} elseif(strpos($column, '==') !== false) {
+			// Get post info
+			$parts = explode('__', $column);
+			$post_id = get_post_meta( $post_id, $parts[0], true );
+			$post = get_post($post_id);
+
+			$temp = $parts[1];
+			if(isset($post->$temp)) {
+				$output = $post->$temp;
+			} else {
+				if(isset($post->ID)) {
+					$output = get_post_meta($post->ID, $temp, true);
+				} else {
+					$output = '';
+				}
+			}
 		} elseif(strpos($column, '~~') !== false && is_callable($this->keys[$column]->format)) {
 			$parts = explode('~~', $column);
 			$values = [];
