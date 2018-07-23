@@ -261,7 +261,16 @@ class Type {
 			$value = get_post_meta( $post->ID, $item->key, true );
 			//echo $item->key;
 			//echo '-<br>';
-			if($item->type == 'end_group') {
+			if($item->type == 'checkbox') {
+				$html .= '<div>';
+				$html .= '<label><input type="checkbox" name="' . esc_attr($item->key) . '" value="' . esc_attr($item->extra) . '"';
+				if($item->extra == $value) {
+					$html .= ' checked';
+				}           
+				$html .= '>' . esc_html($item->title) . '</label>';
+				$html .= '</div>'; 
+			} elseif($item->type == 'end_group') { 
+				$html .= '<p></p>';
 				$html .= '</div>';
 			} elseif($item->type == 'group') {
 				$html .= '<div>';
@@ -411,6 +420,7 @@ class Type {
 						|| $item->type == 'text'
 						|| $item->type == 'select'
 						|| strpos($item->type, 'select_') === 0
+						|| $item->type == 'checkbox'
 					)
 				) {
 					update_post_meta($post_id, $item->key, sanitize_text_field( $_POST[$item->key]));
