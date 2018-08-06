@@ -27,6 +27,8 @@ class Type {
 	public $title_key;
 	public $title_fn;
 
+	public $inside_clone_group = false;
+
 	function __construct($key, $singular, $plural, $cap, $args) {
 		$this->key = $key;
 		$this->singular = $singular;
@@ -115,6 +117,8 @@ class Type {
 			$css = "";
 			$css .= "body { background: red; }\n";
 			wp_add_inline_style($this->full_key . '_inline', $css);
+
+			wp_enqueue_script($this->full_key . '_type', plugins_url('type.js', __FILE__), array('jquery'));
 		}
 	}
 
@@ -259,22 +263,145 @@ class Type {
 				$item->extra = '';
 			}
 			$value = get_post_meta( $post->ID, $item->key, true );
+			$first_value = '';
+			if($item->key && is_array($value)) {
+				$first_value = $value[0];
+			}
 			//echo $item->key;
 			//echo '-<br>';
 			if($item->type == 'checkbox') {
-				$html .= '<div>';
-				$html .= '<label><input type="checkbox" name="' . esc_attr($item->key) . '" value="' . esc_attr($item->extra) . '"';
-				if($item->extra == $value) {
-					$html .= ' checked';
-				}           
-				$html .= '>' . esc_html($item->title) . '</label>';
-				$html .= '</div>'; 
+				if($this->inside_clone_group) {
+					if(is_array($value)) {
+						$fields_index++;
+						$fields[$fields_index] = [];
+						// Check for empty array
+						if(count($value)) {
+							for($j = 0; $j < count($value); $j++) {
+								$temp = '';
+								$temp .= '<div>';
+								$temp .= '<label><input type="checkbox" name="' . esc_attr($item->key) . '_' . $j . '" value="' . esc_attr($item->extra) . '"';
+								if($item->extra == $value[$j]) {
+									$temp .= ' checked';
+								}           
+								$temp .= '>' . esc_html($item->title) . '</label>';
+								$temp .= '<input type="hidden" name="' . esc_attr($item->key) . '_count" value="' . ($j + 1) . '" data-count="yes">'; 
+								$temp .= '</div>'; 
+								$fields[$fields_index][] = $temp;
+							}
+						} else {
+							$temp = '';
+							$temp .= '<div>';
+							$temp .= '<label><input type="checkbox" name="' . esc_attr($item->key) . '_0" value="' . esc_attr($item->extra) . '"';
+							if($item->extra == $value) {
+								$temp .= ' checked';
+							}           
+							$temp .= '>' . esc_html($item->title) . '</label>';
+							$temp .= '<input type="hidden" name="' . esc_attr($item->key) . '_count" value="1">'; 
+							$temp .= '</div>'; 
+							$fields[$fields_index][] = $temp;
+						}
+					} else {
+						$fields_index++;
+						$fields[$fields_index] = [];
+						$temp = '';
+						$temp .= '<div>';
+						$temp .= '<label><input type="checkbox" name="' . esc_attr($item->key) . '_0" value="' . esc_attr($item->extra) . '"';
+						if($item->extra == $value) {
+							$temp .= ' checked';
+						}           
+						$temp .= '>' . esc_html($item->title) . '</label>';
+						$temp .= '<input type="hidden" name="' . esc_attr($item->key) . '_count" value="1">'; 
+						$temp .= '</div>'; 
+						$fields[$fields_index][] = $temp;
+					}
+				} else {
+					$html .= '<div>';
+					$html .= '<label><input type="checkbox" name="' . esc_attr($item->key) . '" value="' . esc_attr($item->extra) . '"';
+					if($item->extra == $value) {
+						$html .= ' checked';
+					}           
+					$html .= '>' . esc_html($item->title) . '</label>';
+					$html .= '</div>'; 
+				}
 			} elseif($item->type == 'end_group') { 
-				$html .= '<p></p>';
+				if($this->inside_clone_group) {
+					if(is_array($value)) {
+						$fields_index++;
+						$fields[$fields_index] = [];
+						for($j = 0; $j < count($value); $j++) {
+							$temp = '';
+							$temp .= '<p></p>';
+							$temp .= '</div>';
+							$temp .= '<br>';
+							$fields[$fields_index][] = $temp;
+						}
+					} else {
+						$fields_index++;
+						$fields[$fields_index] = [];
+						$temp = '';
+						$temp .= '<p></p>';
+						$temp .= '</div>';
+						$temp .= '<br>';
+						$fields[$fields_index][] = $temp;
+					}
+				} else {
+					$html .= '<p></p>';
+					$html .= '</div>';
+					$html .= '<br>';
+				}
+			} elseif($item->type == 'end_group_clone') { 
+				if($this->inside_clone_group) {
+					//echo '<pre>'; print_r($fields); echo '</pre>';
+					for($j = 0; $j < count($fields[0]); $j++) {
+						$html .= '<div>';
+						for($k = 0; $k < count($fields); $k++) {
+							$html .= $fields[$k][$j];
+						}
+						$html .= '<p><a href="#" class="button add_group">Add Group</a></p>';
+						if($j > 0) {
+						$html .= '<p><a href="#" class="button remove_group">Remove Group</a></p>';
+						}
+						$html .= '</div>';
+					}
+				} else {
+					$html .= '<p></p>';
+				}
 				$html .= '</div>';
+				$html .= '<br>';
+				$this->inside_clone_group = false;
 			} elseif($item->type == 'group') {
-				$html .= '<div>';
-				$html .= '<label>' . esc_html($item->title) . '</label>';
+				if($this->inside_clone_group) {
+					if(is_array($value)) {
+						$fields_index++;
+						$fields[$fields_index] = [];
+						for($j = 0; $j < count($value); $j++) {
+							$temp = '';
+							$temp .= '<br>';
+							$temp .= '<div class="group">';
+							$temp .= '<label>' . esc_html($item->title) . '</label>';
+							$fields[$fields_index][] = $temp;
+						}
+					} else {
+						$fields_index++;
+						$fields[$fields_index] = [];
+						$temp = '';
+						$temp .= '<br>';
+						$temp .= '<div class="group">';
+						$temp .= '<label>' . esc_html($item->title) . '</label>';
+						$fields[$fields_index][] = $temp;
+					}
+				} else {
+					$html .= '<br>';
+					$html .= '<div>';
+					$html .= '<label>' . esc_html($item->title) . '</label>';
+				}
+			} elseif($item->type == 'group_clone') {
+				$this->inside_clone_group = true;
+				$fields = [];
+				$fields_index = -1;
+				$html .= '<br>';
+				$html .= '<div class="group_clone">';
+				$html .= '<label><strong>' . esc_html($item->title) . '</strong></label>';
 			} elseif($item->type == 'hidden') {
 				if(!$value) {
 					$value = 0;
@@ -288,46 +415,163 @@ class Type {
 					$html .= $item->title;
 				}
 			} elseif($item->type == 'radio') {
-				$html .= '<div>';
-				$html .= '<label><input type="radio" name="' . esc_attr($item->key) . '" value="' . esc_attr($item->extra) . '"';
-				if($item->extra == $value) {
-					$html .= ' checked';
+				if($this->inside_clone_group) {
+					if(is_array($value)) {
+						$fields_index++;
+						$fields[$fields_index] = [];
+						// Check for empty array
+						if(count($value)) {
+							for($j = 0; $j < count($value); $j++) {
+								$temp = '';
+								$temp .= '<div>';
+								$temp .= '<label><input type="radio" name="' . esc_attr($item->key) . '_' . $j . '" value="' . esc_attr($item->extra) . '"';
+								if($item->extra == $value[$j]) {
+									$temp .= ' checked';
+								}
+								$temp .= ' data-base-name="' . esc_attr($item->key) . '">' . esc_html($item->title) . '</label>';
+								$temp .= '<input type="hidden" name="' . esc_attr($item->key) . '_count" value="' . ($j + 1) . '" data-count="yes">'; 
+								$temp .= '</div>';
+								$fields[$fields_index][] = $temp;
+							}
+						} else {
+							$temp = '';
+							$temp .= '<div>';
+							$temp .= '<label><input type="radio" name="' . esc_attr($item->key) . '_' . 0 . '" value="' . esc_attr($item->extra) . '"';
+							$temp .= ' data-base-name="' . esc_attr($item->key) . '" data-index="' . 0 . '">' . esc_html($item->title) . '</label>';
+							$temp .= '<input type="hidden" name="' . esc_attr($item->key) . '_count" value="' . 1 . '" data-count="yes">'; 
+							$temp .= '</div>';
+							$fields[$fields_index][] = $temp;
+						}
+					} else {
+						$fields_index++;
+						$fields[$fields_index] = [];
+						$temp = '';
+						$temp .= '<div>';
+						$temp .= '<label><input type="radio" name="' . esc_attr($item->key) . '_' . 0 . '[]" value="' . esc_attr($item->extra) . '"';
+						$temp .= ' data-base-name="' . esc_attr($item->key) . '" data-index="' . 0 . '">' . esc_html($item->title) . '</label>';
+						$temp .= '<input type="hidden" name="' . esc_attr($item->key) . '_count" value="' . 1 . '" data-count="yes">'; 
+						$temp .= '</div>';
+						$fields[$fields_index][] = $temp;
+					}
+				} else {
+					$html .= '<div>';
+					$html .= '<label><input type="radio" name="' . esc_attr($item->key) . '" value="' . esc_attr($item->extra) . '"';
+					if($item->extra == $value) {
+						$html .= ' checked';
+					}
+					$html .= '>' . esc_html($item->title) . '</label>';
+					$html .= '</div>';
 				}
-				$html .= '>' . esc_html($item->title) . '</label>';
-				$html .= '</div>';
 			} elseif($item->type == 'text') {
-				$html .= '<p>';
-				$html .= '<label>' . esc_html($item->title) . '</label>';
-				$html .= '<input class="widefat" type="text" name="' . esc_attr($item->key) . '" value="' . esc_attr($value) . '" placeholder="' . esc_attr($item->extra) . '">';
-				$html .= '</p>';
+				if($this->inside_clone_group) {
+					if(is_array($value)) {
+						$fields_index++;
+						$fields[$fields_index] = [];
+						for($j = 0; $j < count($value); $j++) {
+							$temp = '';
+							$temp .= '<p>';
+							$temp .= '<label>' . esc_html($item->title) . '</label>';
+							$temp .= '<input class="widefat" type="text" name="' . esc_attr($item->key) . '[]" value="' . esc_attr($value[$j]) . '" placeholder="' . esc_attr($item->extra) . '">';
+							$temp .= '</p>';
+							$fields[$fields_index][] = $temp;
+						}
+					} else {
+						$fields_index++;
+						$fields[$fields_index] = [];
+						$temp = '';
+						$temp .= '<p>';
+						$temp .= '<label>' . esc_html($item->title) . '</label>';
+						$temp .= '<input class="widefat" type="text" name="' . esc_attr($item->key) . '[]" value="' . esc_attr('') . '" placeholder="' . esc_attr($item->extra) . '">';
+						$temp .= '</p>';
+						$fields[$fields_index][] = $temp;
+					}
+				} else {
+					$html .= '<p>';
+					$html .= '<label>' . esc_html($item->title) . '</label>';
+					$html .= '<input class="widefat" type="text" name="' . esc_attr($item->key) . '" value="' . esc_attr($value) . '" placeholder="' . esc_attr($item->extra) . '">';
+					$html .= '</p>';
+				}
 			} elseif($item->type == 'textarea') {
 				$html .= '<p>';
 				$html .= '<label>' . esc_html($item->title) . '</label>';
 				$html .= '<textarea class="widefat" name="' . esc_attr($item->key) . '" placeholder="' . esc_attr($item->extra) . '">' . esc_html($value) . '</textarea>';
 				$html .= '</p>';
 			} elseif($item->type == 'select') {
-				$html .= '<div>';
-				$html .= '<label>' . esc_html($item->title) . '</label><br>';
-				$html .= '<select name="' . esc_attr($item->key) . '">';
-				for($j = 0; $j < count($item->extra); $j++) {
-					if(is_array($item->extra[$j])) {
-						if($item->extra[$j][1] == $value) {
-							$html .= '<option value="' . esc_attr($item->extra[$j][1]) . '" selected>' . esc_html($item->extra[$j][0]) . '</option>';
-						} else {
-							$html .= '<option value="' . esc_attr($item->extra[$j][1]) . '">' . esc_html($item->extra[$j][0]) . '</option>';
+				if($this->inside_clone_group) {
+					if(is_array($value)) {
+						//print_r($value);die;
+						$fields_index++;
+						$fields[$fields_index] = [];
+						for($j = 0; $j < count($value); $j++) {
+							$temp = '';
+							$temp .= '<div>';
+							$temp .= '<label>' . esc_html($item->title) . '</label><br>';
+							$temp .= '<select name="' . esc_attr($item->key) . '[]">';
+							for($k = 0; $k < count($item->extra); $k++) {
+								if(is_array($item->extra[$k])) {
+									if($item->extra[$k][1] == $value[$j]) {
+										$temp .= '<option value="' . esc_attr($item->extra[$k][1]) . '" selected>' . esc_html($item->extra[$k][0]) . '</option>';
+									} else {
+										$temp .= '<option value="' . esc_attr($item->extra[$k][1]) . '">' . esc_html($item->extra[$k][0]) . '</option>';
+									}
+								} else {
+									if($item->extra[$k] == $value[$j]) {
+										$temp .= '<option value="' . esc_attr($item->extra[$k]) . '" selected>' . esc_html($item->extra[$k]) . '</option>';
+									} else {
+										$temp .= '<option value="' . esc_attr($item->extra[$k]) . '">' . esc_html($item->extra[$k]) . '</option>';
+									}
+								}
+							}
+							$temp .= '</select>';
+							$temp .= '<br>';
+							$temp .= '<br>';
+							$temp .= '</div>';
+							$fields[$fields_index][] = $temp;
 						}
 					} else {
-						if($item->extra[$j] == $value) {
-							$html .= '<option value="' . esc_attr($item->extra[$j]) . '" selected>' . esc_html($item->extra[$j]) . '</option>';
+						$fields_index++;
+						$fields[$fields_index] = [];
+						$temp = '';
+						$temp .= '<div>';
+						$temp .= '<label>' . esc_html($item->title) . '</label><br>';
+						$temp .= '<select name="' . esc_attr($item->key) . '[]">';
+						for($j = 0; $j < count($item->extra); $j++) {
+							if(is_array($item->extra[$j])) {
+								$temp .= '<option value="' . esc_attr($item->extra[$j][1]) . '">' . esc_html($item->extra[$j][0]) . '</option>';
+							} else {
+								$temp .= '<option value="' . esc_attr($item->extra[$j]) . '">' . esc_html($item->extra[$j]) . '</option>';
+							}
+						}
+						$temp .= '</select>';
+						$temp .= '<br>';
+						$temp .= '<br>';
+						$temp .= '</div>';
+						$fields[$fields_index][] = $temp;
+					}
+				} else {
+					$html .= '<div>';
+					$html .= '<label>' . esc_html($item->title) . '</label><br>';
+					$html .= '<select name="' . esc_attr($item->key) . '">';
+					for($j = 0; $j < count($item->extra); $j++) {
+						if(is_array($item->extra[$j])) {
+							if($item->extra[$j][1] == $value) {
+								$html .= '<option value="' . esc_attr($item->extra[$j][1]) . '" selected>' . esc_html($item->extra[$j][0]) . '</option>';
+							} else {
+								$html .= '<option value="' . esc_attr($item->extra[$j][1]) . '">' . esc_html($item->extra[$j][0]) . '</option>';
+							}
 						} else {
-							$html .= '<option value="' . esc_attr($item->extra[$j]) . '">' . esc_html($item->extra[$j]) . '</option>';
+							if($item->extra[$j] == $value) {
+								$html .= '<option value="' . esc_attr($item->extra[$j]) . '" selected>' . esc_html($item->extra[$j]) . '</option>';
+							} else {
+								$html .= '<option value="' . esc_attr($item->extra[$j]) . '">' . esc_html($item->extra[$j]) . '</option>';
+							}
 						}
 					}
+					$html .= '</select>';
+					$html .= '<br>';
+					$html .= '<br>';
+					$html .= '</div>';
 				}
-				$html .= '</select>';
-				$html .= '<br>';
-				$html .= '<br>';
-				$html .= '</div>';
 			} elseif($item->type == 'select_user') {
 				$html .= '<div>';
 				$html .= '<label>' . esc_html($item->title) . '</label><br>';
@@ -413,7 +657,25 @@ class Type {
 			$found = [];
 			for($i = 0; $i < count($this->details); $i++) {
 				$item = $this->details[$i];
+				//echo $item->key;
+				//echo '<br>';
 				if(
+					isset($_POST[$item->key]) 
+					&& is_array($_POST[$item->key]) 
+					&& (
+						$item->type == 'hidden'
+						|| $item->type == 'text'
+						|| $item->type == 'select'
+						|| strpos($item->type, 'select_') === 0
+						|| $item->type == 'checkbox'
+					)
+				) {
+					$output = [];
+					foreach($_POST[$item->key] as $input) {
+						array_push($output, sanitize_text_field($input));
+					}
+					update_post_meta($post_id, $item->key, $output);
+				} elseif(
 					isset($_POST[$item->key]) 
 					&& (
 						$item->type == 'hidden'
@@ -428,6 +690,33 @@ class Type {
 					update_post_meta($post_id, $item->key, sanitize_text_field( $_POST[$item->key]));
 					// Make sure only checks once
 					array_push($found, $item->key);
+				} elseif(isset($_POST[$item->key . '_count']) && $item->type == 'radio' && !in_array($item->key, $found)) {
+					$count = $_POST[$item->key . '_count'];
+					$output = [];
+					for($j = 0; $j < $count; $j++) {
+						if(isset($_POST[$item->key . '_' . $j])) {
+							array_push($output, sanitize_text_field($_POST[$item->key . '_' . $j]));
+						} else {
+							array_push($output, '');
+						}
+					}
+					update_post_meta($post_id, $item->key, $output);
+
+					// Make sure only checks once (radios are listed multiple times)
+					array_push($found, $item->key);
+				} elseif(isset($_POST[$item->key . '_count']) && $item->type == 'checkbox') {
+					$count = $_POST[$item->key . '_count'];
+					//echo $count;die;
+					$output = [];
+					for($j = 0; $j < $count; $j++) {
+						if(isset($_POST[$item->key . '_' . $j])) {
+							array_push($output, sanitize_text_field($_POST[$item->key . '_' . $j]));
+						} else {
+							array_push($output, '');
+						}
+					}
+					//print_r($output);die;
+					update_post_meta($post_id, $item->key, $output);
 				}
 			}
 

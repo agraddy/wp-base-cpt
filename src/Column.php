@@ -37,12 +37,17 @@ class Column {
 		$this->keys[$temp->key] = $temp;
 	}
 
-	function filter($type, $list) {   
+	function filter($type, $list, $values = false) {   
 		$this->filter_type = $type;
 		$this->filters = $list;
+		$this->filter_values = $values;
 
 		for($i = 0; $i < count($list); $i++) {
-			$this->filter_keys['filter_' . $this->parseToKey($list[$i])] = $list[$i];
+			if(isset($values[$i])) {
+				$this->filter_keys['filter_' . $this->parseToKey($list[$i])] = $values[$i];
+			} else {
+				$this->filter_keys['filter_' . $this->parseToKey($list[$i])] = $list[$i];
+			}
 		}
 	}
 
@@ -206,7 +211,7 @@ class Column {
 		 if(is_admin() && $query->query['post_type'] == $this->full_key && isset($_GET[$this->filter_type])) {
 
 			 $key = $_GET[$this->filter_type];
-			 if(isset($this->filter_keys[$key]) && in_array($this->filter_keys[$key], $this->filters)) {
+			 if(isset($this->filter_keys[$key]) && (in_array($this->filter_keys[$key], $this->filters) || in_array($this->filter_keys[$key], $this->filter_values))) {
 				 $query->query_vars['meta_key'] = $this->filter_type;
 				 $query->query_vars['meta_value'] = $this->filter_keys[$key];
 				 //echo '<pre>';
@@ -274,12 +279,18 @@ class Column {
 			$key = 'filter_' . $this->parseToKey($name);
 			$url = admin_url('edit.php?post_status=publish&post_type=' . $this->full_key . '&' . $this->filter_type . '='. $key);
 
+			if(isset($this->filter_values[$i])) {
+				$value = $this->filter_values[$i];
+			} else {
+				$value = $name;
+			}
+
 			remove_filter('parse_query', [$this, 'wpParseQuery']);
 			$posts = get_posts([
 				'post_type' => $this->full_key,
 				'numberposts' => -1,
 				'meta_key' => $this->filter_type,
-				'meta_value' => $name
+				'meta_value' => $value
 			]);
 			$count = count($posts);
 			add_filter('parse_query', [$this, 'wpParseQuery']);
